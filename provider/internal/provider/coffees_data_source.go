@@ -1,3 +1,5 @@
+// Copyright (c) HashiCorp, Inc.
+
 package provider
 
 import (
@@ -55,35 +57,49 @@ func (d *coffeesDataSource) Metadata(_ context.Context, req datasource.MetadataR
 // Schema defines the schema for the data source.
 func (d *coffeesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Fetches the list of coffees.",
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Description: "Placeholder identifier attribute.",
+				Computed:    true,
+			},
 			"coffees": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of coffees.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.Int64Attribute{
-							Computed: true,
+							Description: "Numeric identifier of the coffee.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Product name of the coffee.",
+							Computed:    true,
 						},
 						"teaser": schema.StringAttribute{
-							Computed: true,
+							Description: "Fun tagline for the coffee.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Product description of the coffee.",
+							Computed:    true,
 						},
 						"price": schema.Float64Attribute{
-							Computed: true,
+							Description: "Suggested cost of the coffee.",
+							Computed:    true,
 						},
 						"image": schema.StringAttribute{
-							Computed: true,
+							Description: "URI for an image of the coffee.",
+							Computed:    true,
 						},
 						"ingredients": schema.ListNestedAttribute{
-							Computed: true,
+							Description: "List of ingredients in the coffee.",
+							Computed:    true,
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"id": schema.Int64Attribute{
-										Computed: true,
+										Description: "Numeric identifier of the coffee ingredient.",
+										Computed:    true,
 									},
 								},
 							},

@@ -6,13 +6,16 @@ terraform {
       source = "hashicorp.com/edu/hashicups"
     }
   }
+  required_version = ">= 1.8.0"
 }
 
 provider "hashicups" {
-  host     = "http://localhost:19090"
   username = "education"
   password = "test123"
+  host     = "http://localhost:19090"
 }
 
-data "hashicups_coffees" "example" {}
+output "total_price" {
+  value = provider::hashicups::compute_tax(5.00, 0.085)
+}
 

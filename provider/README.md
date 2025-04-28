@@ -420,12 +420,204 @@ if resp.Diagnostics.HasError() {
 }
 ```
 
-4. 如何测试？
+## Implement resource create and read
+
+In this tutorial, you will add create and read capabilities to a new order resource of a provider that interacts with
+the API of a fictional coffee-shop application called Hashicups.
+
+## Implement resource update
+
+In this tutorial, you will add update capabilities to the order resource of a provider that interacts with the API of a
+fictional coffee-shop application called Hashicups.
+
+# Implement resource import
+
+**什么是 terraform import command?** Terraform 的 import 命令用于将已有基础设施资源纳入 Terraform 的管理，使其能被
+Terraform 的状态文件（terraform.tfstate）跟踪。 This import method takes the given order ID from the terraform import
+command and enables Terraform to begin managing
+the existing order.
+
+```text
+// The method will use the resource.ImportStatePassthroughID() function to retrieve the ID value from the terraform 
+// import command and save it to the id attribute.
+func (r *orderResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+    // Retrieve import ID and save to id attribute
+    resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+```
+
+If there are no errors, Terraform will automatically call the resource's Read method to import the rest of the Terraform
+state. Since the id attribute is all that is necessary for the Read method to work, no additional implementation is
+required.
+
+验证 import 功能的方法：
+
+```bash
+terraform apply -auto-approve
+
+terraform show # 会展示 resource "hashicups_order" "edu" 资源
+
+terraform state rm hashicups_order.edu # 只是移除对该资源的管理，资源仍然是存在的。
+
+terraform show # 没有对 resource "hashicups_order" "edu" 进行管理，但是 Output 中可能还有一些信息，会有一点理解上的干扰
+
+curl -X GET -H "Authorization: ${HASHICUPS_TOKEN}" localhost:19090/orders/2 # 验证到该 order id 在 Application 中还是存在的
+
+terraform import hashicups_order.edu 2 # 将该资源重新纳入 Terraform 的管理
+```
+
+# Implement a function
+
+**什么是 Function？** Provider-defined functions allow provider developers to define functions that encapsulate offline,
+computational logic. Practitioners can call functions from their Terraform configuration. Unlike resources and data
+sources, functions do not manage infrastructure or retrieve data from APIs.
+> Provider-defined functions do all of their work locally. You should never call remote APIs from within the Run(实现该
+> Function 的方法) method.
+
+```text
+// Ensure the implementation satisfies the expected interfaces.
+var (
+    _ provider.Provider              = &hashicupsProvider{}
+    _ provider.ProviderWithFunctions = &hashicupsProvider{}
+)
+
+func (p *hashicupsProvider) Functions(_ context.Context) []func() function.Function {
+    return []func() function.Function{
+        NewComputeTaxFunction,
+    }
+}
+
+package provider
+
+import (
+    "context"
+    "github.com/hashicorp/terraform-plugin-framework/function"
+    "math"
+)
+
+// Ensure the implementation satisfies the desired interfaces.
+var _ function.Function = &ComputeTaxFunction{}
+
+type ComputeTaxFunction struct{}
+
+func NewComputeTaxFunction() function.Function {
+    return &ComputeTaxFunction{}
+}
+
+func (f *ComputeTaxFunction) Metadata(ctx context.Context, req function.MetadataRequest, resp *function.MetadataResponse) {
+    resp.Name = "compute_tax"
+}
+
+func (f *ComputeTaxFunction) Definition(ctx context.Context, req function.DefinitionRequest, resp *function.DefinitionResponse) {
+    resp.Definition = function.Definition{
+        Summary:     "Compute tax for coffee",
+        Description: "Given a price and tax rate, return the total cost including tax.",
+        Parameters: []function.Parameter{
+            function.Float64Parameter{
+                Name:        "price",
+                Description: "Price of coffee item.",
+            },
+            function.Float64Parameter{
+                Name:        "rate",
+                Description: "Tax rate. 0.085 == 8.5%",
+            },
+        },
+        Return: function.Float64Return{},
+    }
+}
+
+func (f *ComputeTaxFunction) Run(ctx context.Context, req function.RunRequest, resp *function.RunResponse) {
+    var price float64
+    var rate float64
+    var total float64
+
+    // Read Terraform argument data into the variables
+    resp.Error = function.ConcatFuncErrors(resp.Error, req.Arguments.Get(ctx, &price, &rate))
+
+    total = math.Round((price+price*rate)*100) / 100
+
+    // Set the result
+    resp.Error = function.ConcatFuncErrors(resp.Error, resp.Result.Set(ctx, total))
+}
+```
+
+**如何使用该 Function？**
+
+```text
+terraform {
+  required_providers {
+    hashicups = {
+      source = "hashicorp.com/edu/hashicups"
+    }
+  }
+  required_version = ">= 1.8.0"
+}
+
+provider "hashicups" {
+  username = "education"
+  password = "test123"
+  host     = "http://localhost:19090"
+}
+
+output "total_price" {
+  value = provider::hashicups::compute_tax(5.00, 0.085)
+}
+```
+
+plan 的时候直接计算出结果：
+
+```text
+Changes to Outputs:
+  + total_price = 5.43
+```
+
+# Implement automated testing
+
+https://developer.hashicorp.com/terraform/tutorials/providers-plugin-framework/providers-plugin-framework-acceptance-testing
+
+什么是 ACC（Acceptance Testing） 测试？ The terraform-plugin-testing Go module helper/resource package enables providers to
+implement automated acceptance testing. The testing framework is built on top of standard go test command functionality
+and calls actual Terraform commands, such as terraform apply, terraform import, and terraform destroy. Unlike manual
+testing, you do not have to locally reinstall the provider on code updates or switch directories to use the expected
+Terraform configuration when you run the automated tests.
+
+测试的重点：
+
+1. **Data source** acceptance testing verifies that the Terraform state contains data after being read from the API.
+2. **Resource acceptance testing** verifies that the entire resource lifecycle, such as the Create, Read, Update, and
+   Delete
+   functionality, along with import capabilities. The testing framework automatically handles destroying test resources
+   and returning any errors as a final step, regardless of whether there is a destroy step explicitly written.
+3. Function acceptance testing verifies that the function works as expected. Since provider functions require Terraform
+   1.8 or newer, the example code checks the version of Terraform before it runs the tests.
+
+# Implement documentation generation
+
+https://developer.hashicorp.com/terraform/tutorials/providers-plugin-framework/providers-plugin-framework-documentation-generation
+
+The terraform-plugin-docs Go module cmd/tfplugindocs command enables providers to implement documentation generation.
+The generation uses schema descriptions and conventionally placed files to produce provider documentation that is
+compatible with the Terraform Registry.
+
+The `tfplugindocs` tool will automatically include Terraform configuration examples. 所以，你需要准备好 examples, 方便让
+tfplugindocs 生成文档。
+
+```text
+Provider: examples/provider/provider.tf
+Resources: examples/resources/TYPE/resource.tf
+Data Sources: examples/data-sources/TYPE/data-source.tf
+Functions: examples/functions/TYPE/function.tf
+Import: examples/resources/hashicups_order/import.sh
+```
+
+
+
+10. 如何测试？
 4. 如何生成文档？
 5. 如何 Public Provider 到 Terraform Registry?
 6. 版本概念在哪里体现？
 
-什么是 ACC（Acceptance Testing） 测试？
 Terratest 是做什么用的？
 如何使用该 Provider？
+什么是 terraformer https://github.com/GoogleCloudPlatform/terraformer？
 

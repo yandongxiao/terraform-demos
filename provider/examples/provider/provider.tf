@@ -1,3 +1,9 @@
-provider "scaffolding" {
-  # example configuration here
+# Copyright (c) HashiCorp, Inc.
+
+# Configuration-based authentication
+provider "hashicups" {
+  username = "education"
+  password = "test123"
+  host     = "http://localhost:19090"
 }
+
